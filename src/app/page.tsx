@@ -9,10 +9,11 @@ import { TaskBoard } from '@/components/TaskBoard';
 import { CredentialsModal } from '@/components/CredentialsModal';
 import { TeamManagerModal } from '@/components/TeamManagerModal';
 import { AuthModal } from '@/components/AuthModal';
+import { LoginScreen } from '@/components/LoginScreen';
 import { RlsHelperModal } from '@/components/RlsHelperModal';
 import { getSupabase } from '@/lib/supabaseClient';
 import { Task, StagedTask, TaskStatus } from '@/types';
-import { ShieldAlert, Sparkles, CheckCircle2 } from 'lucide-react';
+import { ShieldAlert, Sparkles, CheckCircle2, RotateCcw, RefreshCw } from 'lucide-react';
 
 const DEFAULT_TEAM = [
   'Alex Rivera',
@@ -30,6 +31,7 @@ export default function HomePage() {
   const [hasOpenRouterKey, setHasOpenRouterKey] = useState(false);
   const [supabaseUrl, setSupabaseUrl] = useState('');
   const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
   // Modals state
   const [credentialsOpen, setCredentialsOpen] = useState(false);
@@ -140,24 +142,32 @@ export default function HomePage() {
   useEffect(() => {
     const supabase = getSupabase();
     if (supabase) {
-      supabase.auth.getUser().then(({ data }) => {
-        if (data?.user) setUser(data.user);
-      });
+      supabase.auth
+        .getUser()
+        .then(({ data }) => {
+          setUser(data?.user || null);
+          setAuthLoading(false);
+          if (data?.user) fetchBoardTasks();
+        })
+        .catch(() => {
+          setAuthLoading(false);
+        });
 
       const {
         data: { subscription },
       } = supabase.auth.onAuthStateChange((_event, session) => {
         setUser(session?.user || null);
-        fetchBoardTasks();
+        setAuthLoading(false);
+        if (session?.user) {
+          fetchBoardTasks();
+        }
       });
-
-      fetchBoardTasks();
 
       return () => {
         subscription.unsubscribe();
       };
     } else {
-      fetchBoardTasks();
+      setAuthLoading(false);
     }
   }, [supabaseReady, fetchBoardTasks]);
 
@@ -169,6 +179,15 @@ export default function HomePage() {
       setUser(null);
       showToast('Signed out successfully');
     }
+  };
+
+  // Clear Dashboard (Frontend view reset only, leaves database untouched)
+  const handleClearDashboard = () => {
+    setTranscript('');
+    setStagedTasks([]);
+    setBoardTasks([]);
+    setMeetingTitle('Meeting - ' + new Date().toLocaleDateString());
+    showToast('Dashboard cleared (database tasks preserved in Supabase)');
   };
 
   // 4. Extract Tasks with OpenRouter AI via /api/extract
@@ -368,6 +387,41 @@ export default function HomePage() {
     }
   };
 
+  // 1. Loading state during auth check
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-950 flex flex-col items-center justify-center text-white">
+        <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-xl shadow-indigo-500/30 animate-pulse mb-4">
+          <Sparkles className="w-7 h-7 text-white" />
+        </div>
+        <p className="text-xs sm:text-sm font-bold text-slate-300">Checking authentication...</p>
+      </div>
+    );
+  }
+
+  // 2. Strict Authentication First: Show only login screen if not authenticated
+  if (!user) {
+    return (
+      <>
+        <LoginScreen
+          onSuccess={() => {
+            fetchBoardTasks();
+          }}
+          onOpenCredentials={() => setCredentialsOpen(true)}
+          isConfigured={supabaseReady}
+        />
+        <CredentialsModal
+          isOpen={credentialsOpen}
+          onClose={() => setCredentialsOpen(false)}
+          onCredentialsUpdated={checkConfigStatus}
+          initialSupabaseUrl={supabaseUrl}
+          hasAnonKey={hasAnonKey}
+          hasOpenRouterKey={hasOpenRouterKey}
+        />
+      </>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-100/70">
       {/* Toast notification */}
@@ -385,6 +439,7 @@ export default function HomePage() {
         onSignOut={handleSignOut}
         onOpenCredentials={() => setCredentialsOpen(true)}
         onOpenTeam={() => setTeamModalOpen(true)}
+        onClearDashboard={handleClearDashboard}
         supabaseReady={supabaseReady}
         openrouterReady={openrouterReady}
         teamCount={teamMembers.length}
@@ -412,8 +467,8 @@ export default function HomePage() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        {/* Hero Tagline */}
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        {/* Hero Headline & Dashboard Actions */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold mb-2">
               <Sparkles className="w-3.5 h-3.5" />
@@ -422,9 +477,31 @@ export default function HomePage() {
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
               Meeting Action Items &amp; Task Manager
             </h1>
-            <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-2xl">
-              Upload Fireflies transcripts or meeting notes, let AI detect action items with assignees &amp; deadlines, and organize tasks on your sticky-note Kanban board.
-            </p>
+          </div>
+
+          {/* Reset / Clear Dashboard Button */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleClearDashboard}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-rose-50 text-rose-700 font-bold text-xs border border-rose-200 shadow-xs hover:border-rose-300 transition cursor-pointer"
+              title="Clear meeting transcript, staged items, and sticky notes from current view (preserves database records)"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
+              <span>Clear Dashboard</span>
+            </button>
+
+            {boardTasks.length === 0 && (
+              <button
+                type="button"
+                onClick={fetchBoardTasks}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition cursor-pointer"
+                title="Fetch saved tasks from Supabase database"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Reload Saved Tasks</span>
+              </button>
+            )}
           </div>
         </div>
 
