@@ -85,6 +85,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         const { error, data } = await supabase.auth.signUp({
           email: email.trim(),
           password,
+          options: {
+            emailRedirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
+          },
         });
         if (error) throw error;
         if (data.session) {
@@ -93,7 +96,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             onSuccess();
           }, 600);
         } else {
-          setSuccessMsg('Account created! If email confirmation is enabled in your Supabase project, check your inbox. Otherwise, switch to "Sign In" now.');
+          setSuccessMsg('Account created! If email confirmation is required, check your email inbox. Otherwise, switch to "Sign In" now.');
           setMode('signin');
         }
       } else if (mode === 'forgot') {

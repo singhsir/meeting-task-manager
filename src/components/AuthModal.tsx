@@ -64,6 +64,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         const { error, data } = await supabase.auth.signUp({
           email: email.trim(),
           password,
+          options: {
+            emailRedirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
+          },
         });
         if (error) throw error;
         if (data.session) {
@@ -76,7 +79,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           setSuccessMsg('Account created! Please check your email inbox to confirm your address.');
         }
       } else if (mode === 'forgot') {
-        const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+          redirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
+        });
         if (error) throw error;
         setSuccessMsg('Password reset link sent! Check your email inbox.');
       }

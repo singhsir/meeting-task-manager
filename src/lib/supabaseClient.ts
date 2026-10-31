@@ -13,6 +13,14 @@ export const isSupabaseConfigured = (): boolean => {
   );
 };
 
+const authConfig = {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+};
+
 let clientInstance: SupabaseClient | null = null;
 
 export const getSupabase = (): SupabaseClient | null => {
@@ -20,13 +28,13 @@ export const getSupabase = (): SupabaseClient | null => {
     return null;
   }
   if (!clientInstance) {
-    clientInstance = createClient(supabaseUrl, supabaseAnonKey);
+    clientInstance = createClient(supabaseUrl, supabaseAnonKey, authConfig);
   }
   return clientInstance;
 };
 
 // Default export if configured, or a dummy client
 export const supabase = isSupabaseConfigured()
-  ? createClient(supabaseUrl, supabaseAnonKey)
+  ? createClient(supabaseUrl, supabaseAnonKey, authConfig)
   : (null as unknown as SupabaseClient);
 
